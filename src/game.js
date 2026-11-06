@@ -750,16 +750,6 @@ function enterKart() {
 function exitKart() {
   if (!kart.active) return; kart.active = false; kart.group.remove(P.char.group); scene.add(P.char.group); P.char.group.scale.setScalar(1); P.char.sit(false);
   P.x = kart.x + Math.cos(kart.yaw) * 2.8; P.z = kart.z - Math.sin(kart.yaw) * 2.8; P.y = 0; P.vx = P.vz = 0; P.yaw = kart.yaw; kart.v = 0;
-  engine.stop(); $('#speed').classList.add('hidden'); placePlayer();
-}
-function enterKart() {
-  if (kart.active) return; kart.active = true; kart.group.add(P.char.group);
-  P.char.group.position.set(0, 0.45, -0.15); P.char.group.rotation.set(0, 0, 0); P.char.group.scale.setScalar(0.7); P.char.sit(true);
-  engine.start(); $('#speed').classList.remove('hidden');
-}
-function exitKart() {
-  if (!kart.active) return; kart.active = false; kart.group.remove(P.char.group); scene.add(P.char.group); P.char.group.scale.setScalar(1); P.char.sit(false);
-  P.x = kart.x + Math.cos(kart.yaw) * 2.8; P.z = kart.z - Math.sin(kart.yaw) * 2.8; P.y = 0; P.vx = P.vz = 0; P.yaw = kart.yaw; kart.v = 0;
   kart.stopDrift(); keys.delete('KeyC');
   engine.stop(); $('#speed').classList.add('hidden'); placePlayer();
 }
@@ -800,6 +790,7 @@ function finishRace() {
   re.onclick = () => { closeModal(); setTimeout(startRace, 0); }; ok.onclick = closeModal; row.append(re, ok); box.append(row);
   openM(box, { onClose: (rep) => { if (!rep && race) cleanupRace(); } });
 }
+
 
 /* ───────────── 매 프레임 갱신 ───────────── */
 const NOINP = {};
