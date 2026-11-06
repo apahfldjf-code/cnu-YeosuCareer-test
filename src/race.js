@@ -406,7 +406,7 @@ export class KartFx {
     world.updaters.push((dt) => this.update(dt));
   }
   emit(x, y, z, vx, vy, vz, c, life, grav) {
-    const i = this.pi; this.pi = (i + 1) % this.P, o = i * 3;
+    const i = this.pi, o = i * 3; this.pi = (i + 1) % this.P;
     this.pos[o] = x; this.pos[o + 1] = y; this.pos[o + 2] = z; this.vel[o] = vx; this.vel[o + 1] = vy; this.vel[o + 2] = vz;
     this.base[o] = c[0]; this.base[o + 1] = c[1]; this.base[o + 2] = c[2]; this.life[i] = this.max[i] = life; this.grav[i] = grav;
   }
