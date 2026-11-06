@@ -243,8 +243,7 @@ function makePath(root, anims, colliders, { deg, color, sign }) {
     colliders.push({ x: Math.cos(a) * GR - Math.sin(a) * s * 3.6, z: Math.sin(a) * GR + Math.cos(a) * s * 3.6, r: 0.5, h: 5.6 });
   }
   const beam = new THREE.Mesh(rbox(0.5, 0.5, 7.7), em); beam.position.set(GR, 5.35, 0); g.add(beam);
-  const dist = Math.round(100 - GR);
-  const sg = label(`${sign}  ▶ ${dist}m`, { bg: color, scale: 10 }); sg.position.set(GR, 8.2, 0); g.add(sg);
+  const sg = label(`${sign}  ▶`, { bg: color, scale: 10 }); sg.position.set(GR, 8.2, 0); g.add(sg);
   /* 움직임: 발광 띠가 포털 쪽으로 흐르고, 바닥 화살표가 차례로 반짝 */
   anims.push((dt, t) => {
     A.glow.offset.x = -t * 0.18;
