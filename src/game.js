@@ -1,7 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
  * src/game.js  v2 (1단계) — 4개 월드 · 근접전투 · FPS · 인벤토리 · 캐릭터 커스터마이징
- * ※ world.js / core.js / data.js 는 2~4단계에서 아래 "계약"대로 교체됩니다.
- *   4개 파일을 모두 교체한 뒤에 실행하세요. (minigames/report/index/css/main 은 그대로)
+ * + 레이싱 R1+R2 (race.js: 곡선 서킷 · 드리프트 · AI 카트)
  *
  * [data.js] 기존 DEPTS, COLLEGES + 추가 export
  *   WORLDS = { campus|race|soccer|fps: { name, icon } }
@@ -18,14 +17,7 @@
  *   soccer: pitch{x,z,hw,hl}, ballSpots[]
  *   fps:    lootSpots[{x,z,tier}], droneSpots[{x,z,kind}]
  * [core.js] 기존 export 유지 + CUSTOM, randomLook, Inventory, Drone, makeItemMesh, makeGunMesh
- *   CUSTOM = [{ key, label, tab, list }]  list: 색상 문자열 배열 또는 [값,라벨] 배열
- *   createCharacter(look) → { group, walk(t,amt), sit(on), wave(t), stopWave(), swing('L'|'R'), tick(dt),
- *                             hold(def|null), kick(), setGear({helmet,vest,pack}) }
- *   Inventory: bag[{id,n,mag?}], equip{main,sub,helmet,vest,pack}, ammo{AR,SMG,SR,SG,HG}, active('main'|'sub'|'fist'),
- *     cap(), add(id,n,mag)→{ok,msg}, wear(i)→슬롯|null, takeOff(slot)→bool, dropAt(i)→스택|null, useAt(i)→def|null,
- *     weapon()→장착무기|null, armor()→{helmet,vest}(def|null), isEmpty(), clear()
- *   Drone(parent,{x,z,kind}): alive,x,z,r,dmg,center(),update(dt,t,px,pz)→true(발사),hit(dmg)→true(파괴),respawn()
- *   sfx 추가: swing hit shoot(fam) reload empty pickup equip hurt heal portal boom zap
+ *   (Kart 는 race.js 에서 가져옵니다)
  * ═══════════════════════════════════════════════════════════════ */
 import * as THREE from 'three';
 import { DEPTS, COLLEGES, ITEMS, LOOT, WORLDS, AMMO_NAMES } from './data.js';
@@ -57,13 +49,12 @@ import { initDisplay, tickDisplay } from './display.js';
 import { engine } from './engine-sound.js';
 import './touch-hud.js';
 import './guestbook.js';
-import './title-mobile.js';
 import { createFishing } from './fishing.js';
+import './title-mobile.js';
 import { initNpcs, tickNpcs } from './npc.js';
 import { initPost, renderFx } from './post.js';
 import { initDetail, tickDetail } from './detail.js';
 import { Kart, KartFx, RaceRun, buildCircuit } from './race.js';
-
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -179,7 +170,6 @@ const FISH = createFishing({
   place: () => placePlayer(), openM: (c, o) => openM(c, o),
 });
 
-
 function placePlayer() { P.char.group.position.set(P.x, P.y, P.z); P.char.group.rotation.y = P.yaw; }
 function buildPlayer() {
   let parent = scene;
@@ -261,7 +251,6 @@ initTouch({
     if (cur.id === 'fps' && heldDef()) ads = !ads; else melee('R');
   },
 });
-
 
 /* ───────────── HUD ───────────── */
 function hud() {
@@ -724,14 +713,14 @@ function openMenu() {
   btn(`🎵 배경음악: ${bgmPct(getVol('bgm'))} (눌러서 변경)`, () => { cycleVol('bgm'); closeModal(); setTimeout(openMenu, 0); });
   btn(`🔔 효과음: ${bgmPct(getVol('sfx'))} (눌러서 변경)`, () => { cycleVol('sfx'); fx.ding(); closeModal(); setTimeout(openMenu, 0); });
   const sndTestBtn = btn('🔊 소리 테스트', () => { sndTestBtn.textContent = testSound(); });
-    btn(`🖥 화질: ${QUALITIES[S.settings.q].label} (눌러서 변경)`, () => {
+  btn(`🖥 화질: ${QUALITIES[S.settings.q].label} (눌러서 변경)`, () => {
     const o = ['low', 'mid', 'high']; S.settings.q = o[(o.indexOf(S.settings.q) + 1) % 3];
     applyQuality(S.settings.q, renderer, WR.sun, S); save(S); closeModal(); toast(`화질: ${QUALITIES[S.settings.q].label}`);
   });
   btn(`🖱 마우스 감도: ×${S.settings.sens || 1}`, () => { const l = [0.6, 1, 1.5, 2], c = S.settings.sens || 1; S.settings.sens = l[(l.indexOf(c) + 1) % l.length]; save(S); closeModal(); toast(`마우스 감도 ×${S.settings.sens}`); });
   btn(`📱 터치 조작 화면: ${isTouch ? '켜짐' : '꺼짐'} (눌러서 바꾸기 · 새로고침)`, () => { try { localStorage.setItem('cq_touch', isTouch ? '0' : '1'); } catch (e) { /* 무시 */ } location.reload(); });
   btn('❓ 조작법', () => {
-    const h = el('div', '', '<h2>❓ 조작법</h2><ul><li>WASD 이동 · Shift 달리기 · Space 점프 · 마우스 시점(화면 클릭 시 고정, Esc 해제)</li><li><b>좌클릭 잽 · 우클릭 강타</b> (공·훈련 샌드백·드론에 맞아요)</li><li>FPS 월드: 좌클릭 발사 · 우클릭 조준 · R 재장전 · V 1/3인칭 · F 줍기</li><li>I 가방(착용·해제·버리기) · 1~6 단축바 · E 상호작용/포털 · F 공 차기</li><li>카트: W/S 가속·후진, A/D 조향, Space 브레이크, ⚡패드 부스트</li><li>Tab 리포트(FPS에선 가방) · M 지도 크기 · Esc 메뉴 · F11 전체화면</li></ul>');
+    const h = el('div', '', '<h2>❓ 조작법</h2><ul><li>WASD 이동 · Shift 달리기 · Space 점프 · 마우스 시점(화면 클릭 시 고정, Esc 해제)</li><li><b>좌클릭 잽 · 우클릭 강타</b> (공·훈련 샌드백·드론에 맞아요)</li><li>FPS 월드: 좌클릭 발사 · 우클릭 조준 · R 재장전 · V 1/3인칭 · F 줍기</li><li>I 가방(착용·해제·버리기) · 1~6 단축바 · E 상호작용/포털 · F 공 차기</li><li>카트: W/S 가속·후진, A/D 조향, Space 브레이크, Shift(또는 C) 드리프트, ⚡패드 부스트</li><li>Tab 리포트(FPS에선 가방) · M 지도 크기 · Esc 메뉴 · F11 전체화면</li></ul>');
     if (isTouch) h.innerHTML = TOUCH_HELP;
     const c = el('button', 'btn primary', '닫기'); c.onclick = closeModal; h.append(c); openM(h);
   });
@@ -791,7 +780,6 @@ function finishRace() {
   openM(box, { onClose: (rep) => { if (!rep && race) cleanupRace(); } });
 }
 
-
 /* ───────────── 매 프레임 갱신 ───────────── */
 const NOINP = {};
 function movePlayer(dt, t) {
@@ -799,8 +787,10 @@ function movePlayer(dt, t) {
   const ix = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + joy.x, iz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0) + joy.y;
   const sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw), dx = sy * iz - cy * ix, dz = cy * iz + sy * ix, len = Math.hypot(dx, dz);
   let tvx = 0, tvz = 0;
-  if (len > 0.05) { const m = Math.min(1, len); tvx = (dx / len) * sp * m; tvz = (dz / len) * sp * m;
-  if (!fp && !P.atk) P.yaw = lerpAngle(P.yaw, Math.atan2(dx, dz), Math.min(1, 14 * dt)); }
+  if (len > 0.05) {
+    const m = Math.min(1, len); tvx = (dx / len) * sp * m; tvz = (dz / len) * sp * m;
+    if (!fp && !P.atk) P.yaw = lerpAngle(P.yaw, Math.atan2(dx, dz), Math.min(1, 14 * dt));
+  }
   if (fp) P.yaw = view === 'fps' ? cam.yaw : lerpAngle(P.yaw, cam.yaw, Math.min(1, 16 * dt));
   P.vx += (tvx - P.vx) * Math.min(1, 12 * dt); P.vz += (tvz - P.vz) * Math.min(1, 12 * dt);
   P.x += P.vx * dt; P.z += P.vz * dt;
@@ -827,7 +817,6 @@ function driveKart(dt, active) {
   engine.set(kart.v);
   $('#speed').textContent = `${Math.round(Math.abs(kart.v) * 3.6)} km/h${kart.drift ? ' · 🌀' + ['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][kart.mt] : ''}`;
 }
-
 function updateCamera(dt) {
   const fp = cur.id === 'fps' && view === 'fps' && !kart.active;
   P.char.group.visible = !fp; if (vm) vm.visible = fp;
@@ -836,12 +825,11 @@ function updateCamera(dt) {
     camera.lookAt(P.x + Math.sin(cam.yaw) * cp, P.y + 1.62 + Math.sin(cam.aim), P.z + Math.cos(cam.yaw) * cp); return;
   }
   let tx, ty, tz;
-    if (kart.active) {
+  if (kart.active) {
     tx = kart.x; tz = kart.z; ty = 1.4;
     const freeLook = isTouch ? looking : (performance.now() - cam.lastDrag < 1500);
     if (!freeLook) cam.yaw = lerpAngle(cam.yaw, kart.camYaw != null ? kart.camYaw : kart.yaw, Math.min(1, (isTouch ? 5 : 2.2) * dt));
-  }
-  else { tx = P.x; tz = P.z; ty = P.y + 1.5; if (mode === 'play') { if (keys.has('ArrowLeft')) cam.yaw += 1.8 * dt; if (keys.has('ArrowRight')) cam.yaw -= 1.8 * dt; } }
+  } else { tx = P.x; tz = P.z; ty = P.y + 1.5; if (mode === 'play') { if (keys.has('ArrowLeft')) cam.yaw += 1.8 * dt; if (keys.has('ArrowRight')) cam.yaw -= 1.8 * dt; } }
   const d = cam.dist * (kart.active ? 1.15 : 1), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
   const wx = tx - Math.sin(cam.yaw) * d * cp, wz = tz - Math.cos(cam.yaw) * d * cp, wy = ty + d * sp, k = Math.min(1, 10 * dt);
   camera.position.x += (wx - camera.position.x) * k; camera.position.y += (wy - camera.position.y) * k; camera.position.z += (wz - camera.position.z) * k;
@@ -917,7 +905,7 @@ function drawMini() {
       mx.strokeStyle = '#6a6e78'; mx.lineWidth = RW.TRACK_W * sc; mx.beginPath(); mx.arc(c, c, RW.TRACK_R * sc, 0, 7); mx.stroke(); mx.fillStyle = '#fff'; mx.fillRect(X(RW.TRACK_R) - 7 * sc, c - 1, 14 * sc, 2);
     }
   } else if (cur.id === 'soccer') {
-  FISH.mini(mx, X, Z, sc);
+    FISH.mini(mx, X, Z, sc);
   } else if (cur.id === 'fps') {
     cur.colliders.forEach((q) => dot(q.x, q.z, 1.5, '#8a93a3')); loot.forEach((l) => dot(l.x, l.z, 2.5, '#ffd24a')); drones.forEach((d) => { if (d.alive) dot(d.x, d.z, 3, '#ff6b6b'); });
   }
