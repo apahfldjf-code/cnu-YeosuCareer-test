@@ -129,7 +129,6 @@ body.touch .slot small{display:none}
 #hptxt{line-height:18px;font-size:12px}
 #ammobox{bottom:66px;padding:6px 12px;font-size:13px}
 #lockhint{bottom:62px}
-body.touch #bar{zoom:.5}
 `;
 document.head.append(css);
 const hx = el('div'); hx.id = 'hudx'; hx.style.display = 'none';
