@@ -1,15 +1,20 @@
 /* ═══════════════════════════════════════════════════════════════
- * src/touch-hud.js (신규, U3) — 모바일 화면 정리
+ * src/touch-hud.js (U3 v2) — 모바일 화면 정리
  *
  * 1) 부스 앞에 뜨는 "체험하기" 상자를 눌러서 바로 체험을 시작합니다.
- *    - 부스뿐 아니라 리포트 단말기, 레이싱 센터, 포털, FPS 줍기(F), 카트 내리기에도 똑같이 적용돼요.
+ *    - 부스, 리포트 단말기, 레이싱 센터, 포털, FPS 줍기(F), 카트 내리기에 똑같이 적용돼요.
  *    - 화면에 보이던 [E]/[F] 글자는 모바일에서 지우고, 눌러 보라는 ▶ 표시를 붙입니다.
  * 2) 좌측(현황 카드) · 우측(미니맵·리포트·메뉴·조작 버튼) · 하단(단축바)을 작게 줄이고 겹치지 않게 재배치합니다.
  *    - 조작 버튼은 input.js 를 고치지 않고, 버튼 안의 이모지를 보고 찾아서 자리를 다시 잡습니다.
  *
- * 설치: game.js 맨 위 import 들 중 "가장 앞쪽"에 한 줄 추가
+ * v2 변경점
+ *   - 하단 단축바(DOGBAR) 크기 50% 축소 (CFG.bar)
+ *   - 우측 하단 조작 버튼(공격·강타·점프·✋) 50% 확대 (CFG.act)
+ *   - 브레이크는 공격 버튼 자리, 레이스 취소는 강타 버튼 자리로 이동 (카트 탈 때 크게 보이게)
+ *   - 재장전·시점전환(FPS)은 점프 버튼 위로 이동
+ *
+ * 설치: game.js 맨 위 import 들 중 "가장 앞쪽"에 한 줄 (이미 있으면 그대로)
  *       import './touch-hud.js';
- *       (mobile-ui.js 를 이미 쓰고 있다면 그 import 보다 "뒤"에 두세요.)
  *
  * 크기 조절은 아래 CFG 숫자만 바꾸면 됩니다.
  * 콘솔 확인: __thud()
@@ -17,16 +22,21 @@
 import { isTouch, buzz } from './input.js';
 
 const CFG = {
-  b: 'clamp(34px, 11vh, 52px)',     // 조작 버튼 기본 크기 (화면 높이의 11%, 34~52px)
+  b: 'clamp(34px, 11vh, 52px)',     // 기준 크기 (화면 높이의 11%, 34~52px)
   map: 'clamp(64px, 24vh, 100px)',  // 미니맵 지름
   card: 0.68,                       // 좌측 현황 카드 축소 배율 (작게 → 0.6, 크게 → 0.8)
   alpha: 0.88,                      // 조작 버튼 투명도
+  act: 1.5,                         // 우측 하단 조작 버튼 배율 (1.5 = 기존보다 50% 크게, 더 키우려면 1.7)
+  bar: 0.5,                         // 하단 단축바 배율 (0.5 = 기존의 절반, 너무 작으면 0.6~0.7)
+  barMin: 22,                       // 단축바 칸 최소 크기(px) — 이보다 작아지면 손가락으로 누르기 힘들어요
 };
 
 const $ = (s) => document.querySelector(s);
 
 const CSS = `
-:root{--b:${CFG.b};--mm:${CFG.map}}
+:root{--b:${CFG.b};--mm:${CFG.map};
+  --sl:max(${CFG.barMin}px, calc(var(--b)*${(0.8 * CFG.bar).toFixed(3)}));
+  --bh:calc(var(--sl) + 8px)}
 
 /* ── 좌측: 현황 카드 ── */
 body.touch #hud-card{left:6px!important;top:6px!important;min-width:0!important;padding:6px 10px!important;
@@ -39,24 +49,25 @@ body.touch #hud-right .hud-btns{position:fixed!important;top:6px!important;right
 body.touch #hud-right .hud-btns button{width:calc(var(--b)*.8)!important;height:calc(var(--b)*.8)!important;padding:0!important;
   font-size:calc(var(--b)*.42)!important;border-radius:50%!important;line-height:1!important}
 
-/* ── 하단: 단축바 ── */
-body.touch #bar{bottom:calc(4px + env(safe-area-inset-bottom,0px))!important;padding:3px!important;gap:3px!important;
-  border-radius:10px!important;background:rgba(8,20,40,.55)!important}
-body.touch .slot{width:calc(var(--b)*.8)!important;height:calc(var(--b)*.8)!important;border-radius:8px!important}
-body.touch .slot b{font-size:calc(var(--b)*.4)!important}
-body.touch .slot i{font-size:8px!important;top:0!important;left:3px!important}
+/* ── 하단: 단축바(DOGBAR) ── */
+body.touch #bar{bottom:calc(3px + env(safe-area-inset-bottom,0px))!important;padding:2px!important;gap:2px!important;
+  border-radius:8px!important;background:rgba(8,20,40,.5)!important}
+body.touch .slot{width:var(--sl)!important;height:var(--sl)!important;min-width:0!important;min-height:0!important;
+  flex:0 0 auto!important;padding:0!important;box-sizing:border-box!important;border-radius:6px!important}
+body.touch .slot b{font-size:calc(var(--sl)*.58)!important;line-height:1!important}
+body.touch .slot i{font-size:6px!important;top:0!important;left:2px!important;line-height:1!important}
 body.touch .slot small{display:none!important}
 
 /* ── FPS 체력·탄약 ── */
 body.touch #hpbox{top:34px!important;width:150px!important;height:14px!important}
 body.touch #hptxt{line-height:14px!important;font-size:10px!important}
-body.touch #ammobox{bottom:calc(var(--b)*.8 + 14px)!important;padding:3px 9px!important;font-size:11px!important}
+body.touch #ammobox{bottom:calc(var(--bh) + 8px)!important;padding:3px 9px!important;font-size:11px!important}
 body.touch #lockhint{display:none!important}
 
 /* ── 체험하기 상자 = 누르는 버튼 ── */
 body.touch #prompt{
   z-index:30!important;pointer-events:auto!important;touch-action:manipulation;cursor:pointer;
-  bottom:calc(var(--b)*.8 + 14px + env(safe-area-inset-bottom,0px))!important;
+  bottom:calc(var(--bh) + 8px + env(safe-area-inset-bottom,0px))!important;
   min-height:38px;padding:7px 16px!important;font-size:14px!important;font-weight:800!important;
   color:#10223f!important;background:linear-gradient(#ffe688,#ffc42f)!important;
   border:2px solid #fff!important;border-radius:999px!important;box-shadow:0 3px 12px rgba(0,0,0,.45);
@@ -96,20 +107,34 @@ function style(el, o) {
   for (const k in o) el.style.setProperty(k, o[k], 'important');
 }
 
-/* 크기 단위: b = 기본 버튼, g = 간격 */
+/* ── 버튼 배치 ───────────────────────────────────────────────
+ *   오른쪽 아래를 기준으로 이렇게 놓아요 (K = CFG.act)
+ *
+ *            [재장전][시점]            ← FPS 에서만
+ *                      [ 점프 ]
+ *     [✋사용]
+ *     [ 강타/조준 ]   [  공격  ]
+ *   카트 탈 때는 공격 자리 = 🛑 브레이크, 강타 자리 = ✖ 레이스 취소
+ * ─────────────────────────────────────────────────────────── */
 const B = 'var(--b)';
+const K = CFG.act, AT = +(1.35 * K).toFixed(3), SM = +(0.8 * K).toFixed(3), UU = +(1.1 * K).toFixed(3);
+const G = 8, E = 10;                                         // G = 버튼 사이 간격, E = 화면 가장자리 여백(px)
+const right = (extra = '0px') => `calc(${E}px + env(safe-area-inset-right,0px) + ${extra})`;
+const bottom = (extra = '0px') => `calc(${E}px + env(safe-area-inset-bottom,0px) + ${extra})`;
+
 function place(el, role) {
   const base = { position: 'fixed', left: 'auto', top: 'auto', margin: '0', padding: '0', 'border-radius': '50%', opacity: String(CFG.alpha), transform: 'none' };
   const sz = (m) => ({ width: `calc(${B}*${m})`, height: `calc(${B}*${m})`, 'min-width': '0', 'min-height': '0', 'font-size': `calc(${B}*${m}*.5)` });
-  const small = ['rel', 'view', 'brake', 'cancel'];
-  if (role === 'atk')   style(el, { ...base, ...sz(1.35), right: '10px', bottom: '10px' });
-  else if (role === 'alt')  style(el, { ...base, ...sz(1), right: `calc(18px + ${B}*1.35)`, bottom: '10px' });
-  else if (role === 'jump') style(el, { ...base, ...sz(1), right: '10px', bottom: `calc(18px + ${B}*1.35)` });
-  else if (role === 'use')  style(el, { ...base, ...sz(1.1), right: `calc(18px + ${B}*1.35)`, bottom: `calc(18px + ${B})` });
-  else if (small.includes(role)) {
-    const k = small.indexOf(role);
-    style(el, { ...base, ...sz(0.8), right: `calc(26px + ${B}*2.35 + ${k}*(${B}*.8 + 6px))`, bottom: '10px' });
-  }
+  const side = `${B}*${AT} + ${G}px`;                        // 공격 버튼 폭 + 간격
+  const rowK = `${B}*${K} + ${G}px`;                         // 기본 버튼 높이 + 간격
+  const rel = `${B}*${AT} + ${B}*${K} + ${G * 2}px`;         // 점프 버튼 위
+
+  if (role === 'atk' || role === 'brake')      style(el, { ...base, ...sz(AT), right: right(), bottom: bottom() });
+  else if (role === 'alt' || role === 'cancel') style(el, { ...base, ...sz(K), right: right(side), bottom: bottom() });
+  else if (role === 'jump') style(el, { ...base, ...sz(K), right: right(), bottom: bottom(side) });
+  else if (role === 'use')  style(el, { ...base, ...sz(UU), right: right(side), bottom: bottom(rowK) });
+  else if (role === 'rel')  style(el, { ...base, ...sz(SM), right: right(), bottom: bottom(rel) });
+  else if (role === 'view') style(el, { ...base, ...sz(SM), right: right(`${B}*${SM} + 6px`), bottom: bottom(rel) });
 }
 
 /* ── 400ms 마다: 버튼 재배치 + 리포트/메뉴 아이콘화 ── */
@@ -188,9 +213,11 @@ if (isTouch) {
   if (document.body) boot(); else addEventListener('DOMContentLoaded', boot);
 }
 
-/* 콘솔 확인용: 어떤 버튼을 찾았는지 */
+/* 콘솔 확인용: 어떤 버튼을 찾았는지 + 실제 크기 */
 window.__thud = () => ({
   touch: isTouch,
-  buttons: Object.fromEntries(Object.entries(found).map(([k, el]) => [k, (el.textContent || '').trim()])),
+  cfg: { act: CFG.act, bar: CFG.bar },
+  slotPx: (() => { const s = document.querySelector('.slot'); return s ? Math.round(s.getBoundingClientRect().width) : null; })(),
+  buttons: Object.fromEntries(Object.entries(found).map(([k, el]) => [k, { icon: (el.textContent || '').trim(), px: Math.round(el.getBoundingClientRect().width) }])),
   prompt: (() => { const p = $('#prompt'); return p ? { text: p.textContent, key: p.dataset.k || null, shown: getComputedStyle(p).display !== 'none' } : null; })(),
 });
