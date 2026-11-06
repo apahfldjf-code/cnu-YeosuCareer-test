@@ -30,7 +30,7 @@
 import * as THREE from 'three';
 import { DEPTS, COLLEGES, ITEMS, LOOT, WORLDS, AMMO_NAMES } from './data.js';
 import { load, save, reset, sfx, setSound, isSoundOn, createCharacter, CUSTOM, randomLook,
-  Ball, Kart, makeKartMesh, Inventory, Drone, makeGunMesh, makeItemMesh, $, el, toast, openModal, closeModal, isModalOpen } from './core.js';
+  Ball, makeKartMesh, Inventory, Drone, makeGunMesh, makeItemMesh, $, el, toast, openModal, closeModal, isModalOpen } from './core.js';
 import { buildWorlds } from './world.js';
 import { isTouch, initTouch, adaptQuality, renderInfo, touchSync, joy, QUALITIES, applyQuality, buzz, goFullscreen, TOUCH_HELP, looking } from './input.js';
 import { runGame } from './minigames.js';
@@ -62,6 +62,8 @@ import { createFishing } from './fishing.js';
 import { initNpcs, tickNpcs } from './npc.js';
 import { initPost, renderFx } from './post.js';
 import { initDetail, tickDetail } from './detail.js';
+import { Kart, KartFx, RaceRun, buildCircuit } from './race.js';
+
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -142,6 +144,11 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enable
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(60, 1, 0.1, 900); scene.add(camera);
 const WR = buildWorlds(scene), WS = WR.worlds; let cur = WS.campus; WR.sun.castShadow = S.settings.shadow;
+try {
+  const rc = buildCircuit(scene);
+  if (rc) { scene.remove(WS.race.root); WS.race = rc; if (S.circuit !== 2) { S.circuit = 2; S.bestLap = null; S.bestRace = null; save(S); } }
+} catch (e) { console.warn('[race] 새 서킷 실패 → 기존 원형 서킷 사용', e); }
+
 if (!QUALITIES[S.settings.q] || S.settings.qv !== 3) { S.settings.q = 'high'; S.settings.qv = 3; }
 initDisplay(renderer, scene);
 initPost(renderer, scene, camera);
@@ -160,6 +167,8 @@ initNpcs(WS.campus, { quality: S.settings.q });
 
 const P = { x: cur.spawn.x, z: cur.spawn.z, y: 0, vx: 0, vz: 0, vy: 0, yaw: cur.spawn.yaw, char: null, cd: 0, atk: null };
 const kart = new Kart(WS.race.root), RW = WS.race.W; kart.place(WS.race.kartSpawn.x, WS.race.kartSpawn.z, WS.race.kartSpawn.yaw);
+kart.onEvent = (e, l) => { if (e === 'turbo') sfx.boost(); else if (e === 'charge' && l > 0) sfx.beep(); };
+new KartFx(kart, WS.race);
 const ballsBy = { campus: WS.campus.ballSpots.map((s) => new Ball(WS.campus.root, s)), soccer: [] };
 const balls = () => ballsBy[cur.id] || [];
 const drones = WS.fps.droneSpots.map((s) => new Drone(WS.fps.root, s));
@@ -743,48 +752,50 @@ function exitKart() {
   P.x = kart.x + Math.cos(kart.yaw) * 2.8; P.z = kart.z - Math.sin(kart.yaw) * 2.8; P.y = 0; P.vx = P.vz = 0; P.yaw = kart.yaw; kart.v = 0;
   engine.stop(); $('#speed').classList.add('hidden'); placePlayer();
 }
+function enterKart() {
+  if (kart.active) return; kart.active = true; kart.group.add(P.char.group);
+  P.char.group.position.set(0, 0.45, -0.15); P.char.group.rotation.set(0, 0, 0); P.char.group.scale.setScalar(0.7); P.char.sit(true);
+  engine.start(); $('#speed').classList.remove('hidden');
+}
+function exitKart() {
+  if (!kart.active) return; kart.active = false; kart.group.remove(P.char.group); scene.add(P.char.group); P.char.group.scale.setScalar(1); P.char.sit(false);
+  P.x = kart.x + Math.cos(kart.yaw) * 2.8; P.z = kart.z - Math.sin(kart.yaw) * 2.8; P.y = 0; P.vx = P.vz = 0; P.yaw = kart.yaw; kart.v = 0;
+  kart.stopDrift(); keys.delete('KeyC');
+  engine.stop(); $('#speed').classList.add('hidden'); placePlayer();
+}
 function openGarage() {
-  const box = el('div', '', '<h2>🏎️ 레이싱 센터</h2><p>원형 서킷을 달려요! 노란 ⚡ 패드는 부스트, 코인은 줍기. 3바퀴 기록은 저장돼요.</p>');
-  const a = el('button', 'btn primary big', '🏁 3랩 레이스 (AI 3대와 대결)'), b = el('button', 'btn big', '🚗 자유 주행');
-  a.style.cssText = b.style.cssText = 'display:block;width:100%;margin:8px 0';
-  a.onclick = () => { closeModal(); setTimeout(startRace, 0); }; b.onclick = () => { closeModal(); enterKart(); toast('WASD로 운전! E로 내리기'); };
-  box.append(a, b); openM(box);
+  const lv = S.settings.raceLv ?? 1, NM = ['쉬움', '보통', '어려움'];
+  const box = el('div', '', '<h2>🏎️ 레이싱 센터</h2><p>꼬불꼬불한 서킷을 달려요! <b>드리프트</b>(PC: Shift · 폰: 🌀)를 누른 채 코너를 돌고 떼면 <b>미니터보</b>! 노란 ⚡ 패드는 부스트, 잔디는 느려져요. 폰에서는 자동으로 가속돼요.</p>');
+  const a = el('button', 'btn primary big', '🏁 3랩 레이스 (AI 3대와 대결)'), d = el('button', 'btn big', `🎚 AI 난이도: ${NM[lv]} (눌러서 변경)`), b = el('button', 'btn big', '🚗 자유 주행');
+  a.style.cssText = d.style.cssText = b.style.cssText = 'display:block;width:100%;margin:8px 0';
+  a.onclick = () => { closeModal(); setTimeout(startRace, 0); };
+  d.onclick = () => { S.settings.raceLv = (lv + 1) % 3; save(S); closeModal(); setTimeout(openGarage, 0); };
+  b.onclick = () => { closeModal(); enterKart(); toast('WASD로 운전! E로 내리기'); };
+  box.append(a, d, b); openM(box);
 }
 function startRace() {
-  enterKart(); const th = -0.07, R = RW.TRACK_R; kart.place(R * Math.cos(th), R * Math.sin(th), -th); kart.frozen = true;
-  const sp = [29.5 + rnd(-1, 1), 32.5 + rnd(-1, 1), 35 + rnd(-1, 1)], cols = ['#4c8dd9', '#47b5a2', '#c06bd8'];
-  race = { state: 'cd', cd: 3.99, t: 0, prog: 0, lastTh: th, lap: 0, lapT: [], lapStart: 0,
-    ai: [{ r: R - 5, th0: -0.12 }, { r: R + 5, th0: -0.12 }, { r: R, th0: -0.2 }].map((a, i) => { const m = makeKartMesh(cols[i]); WS.race.root.add(m); return { ...a, v: sp[i], m }; }) };
-  race.ai.forEach((a) => { a.m.position.set(a.r * Math.cos(a.th0), 0, a.r * Math.sin(a.th0)); a.m.rotation.y = -a.th0; });
+  if (!RW.track) { toast('새 서킷을 불러오지 못했어요. 자유 주행만 가능해요'); return; }
+  enterKart();
+  race = new RaceRun({ world: WS.race, kart, laps: 3, level: S.settings.raceLv ?? 1, sfx, toast });
   $('#race-info').classList.remove('hidden');
 }
 function cleanupRace() {
-  if (!race) return; race.ai.forEach((a) => a.m.parent && a.m.parent.remove(a.m)); race = null; kart.frozen = false;
+  if (!race) return; race.dispose(); race = null; kart.frozen = false;
   $('#race-info').classList.add('hidden'); $('#countdown').textContent = '';
 }
 const fmt = (t) => t.toFixed(1) + '초';
 function raceUpdate(dt) {
-  if (!race) return; const cd = $('#countdown');
-  if (race.state === 'cd') {
-    const before = Math.ceil(race.cd); race.cd -= dt; const n = Math.ceil(race.cd);
-    if (n !== before && n > 0) sfx.beep(); cd.textContent = n > 0 ? n : 'GO!';
-    if (race.cd <= 0) { race.state = 'run'; kart.frozen = false; sfx.go(); setTimeout(() => { cd.textContent = ''; }, 700); }
-  } else if (race.state === 'run') {
-    race.t += dt;
-    const th = Math.atan2(kart.z, kart.x); let d = th - race.lastTh; if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; race.lastTh = th;
-    if (Math.abs(Math.hypot(kart.x, kart.z) - RW.TRACK_R) < 16) race.prog = Math.max(0, race.prog + d);
-    race.ai.forEach((a) => { const ang = a.th0 + (a.v / a.r) * race.t; a.m.position.set(a.r * Math.cos(ang), 0, a.r * Math.sin(ang)); a.m.rotation.y = -ang; });
-    const lapDone = Math.floor(race.prog / (Math.PI * 2));
-    if (lapDone > race.lap) { race.lapT.push(race.t - race.lapStart); race.lapStart = race.t; race.lap = lapDone; sfx.ok(); toast(`랩 ${race.lap} 완료 ⏱ ${fmt(race.lapT[race.lapT.length - 1])}`); if (race.lap >= 3) { finishRace(); return; } }
-    const rank = 1 + race.ai.filter((a) => (a.v / a.r) * race.t > race.prog).length;
-    $('#race-info').textContent = `🏁 랩 ${Math.min(3, race.lap + 1)}/3 · ⏱ ${fmt(race.t)} · 순위 ${rank}/4`;
-  }
+  if (!race) return;
+  const r = race.update(dt);
+  $('#countdown').textContent = r.cd;
+  if (r.info) $('#race-info').textContent = r.info;
+  if (r.done) finishRace();
 }
 function finishRace() {
-  race.state = 'done'; kart.frozen = true; const T = race.t, rank = 1 + race.ai.filter((a) => (3 * Math.PI * 2 * a.r) / a.v < T).length;
-  const best = Math.min(...race.lapT), reward = [30, 15, 8, 3][rank - 1]; S.coins += reward;
+  const R = race.result(); kart.frozen = true;
+  const T = R.T, rank = R.rank, best = Math.min(...R.lapT), reward = [30, 15, 8, 3][rank - 1]; S.coins += reward;
   if (!S.bestLap || best < S.bestLap) S.bestLap = best; if (!S.bestRace || T < S.bestRace) S.bestRace = T; save(S); hud(); sfx.win();
-  const box = el('div', '', `<h2>🏁 레이스 종료!</h2><div class="score">${rank}<small>위</small></div><p style="text-align:center">총 기록 ${fmt(T)}<br>랩 타임 ${race.lapT.map(fmt).join(' / ')}<br>최고 랩 ${S.bestLap.toFixed(1)}초 · 🪙 +${reward}</p>`);
+  const box = el('div', '', `<h2>🏁 레이스 종료!</h2><div class="score">${rank}<small>위</small></div><p style="text-align:center">총 기록 ${fmt(T)}<br>랩 타임 ${R.lapT.map(fmt).join(' / ')}<br>최고 랩 ${S.bestLap.toFixed(1)}초 · 🪙 +${reward}</p>`);
   const row = el('div', 'row'), re = el('button', 'btn primary', '🔁 다시 도전'), ok = el('button', 'btn', '자유 주행으로');
   re.onclick = () => { closeModal(); setTimeout(startRace, 0); }; ok.onclick = closeModal; row.append(re, ok); box.append(row);
   openM(box, { onClose: (rep) => { if (!rep && race) cleanupRace(); } });
@@ -809,12 +820,23 @@ function movePlayer(dt, t) {
   P.char.walk(t, clamp(Math.hypot(P.vx, P.vz) / 6, 0, 1.2)); P.char.tick(dt); placePlayer();
 }
 function driveKart(dt, active) {
-  const k = keys;
-  const inp = active ? { up: k.has('KeyW') || k.has('ArrowUp') || joy.y > 0.3, down: k.has('KeyS') || k.has('ArrowDown') || joy.y < -0.3, left: k.has('KeyA') || k.has('ArrowLeft') || joy.x < -0.3, right: k.has('KeyD') || k.has('ArrowRight') || joy.x > 0.3, brake: k.has('Space') } : NOINP;
+  const k = keys, tch = isTouch && active, gx = Math.abs(joy.x) > 0.15 ? joy.x : 0;
+  let inp = NOINP;
+  if (active) {
+    const steer = clamp((k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) - (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - gx, -1, 1);
+    inp = {
+      up: tch ? (joy.y > -0.3 && !k.has('Space')) : (k.has('KeyW') || k.has('ArrowUp') || joy.y > 0.3),   // 폰은 자동 가속
+      down: k.has('KeyS') || k.has('ArrowDown') || joy.y < -0.3,
+      steer, brake: k.has('Space'),
+      drift: k.has('KeyC') || (!isTouch && (k.has('ShiftLeft') || k.has('ShiftRight'))),
+    };
+  }
   kart.update(dt, inp, cur.colliders, RW, () => sfx.bump());
   (cur.pads || []).forEach((p) => { if (Math.hypot(kart.x - p.x, kart.z - p.z) < 4.5 && kart.boost <= 0) { kart.boost = 1.6; sfx.boost(); } });
-  engine.set(kart.v); $('#speed').textContent = `${Math.round(Math.abs(kart.v) * 3.6)} km/h`;
+  engine.set(kart.v);
+  $('#speed').textContent = `${Math.round(Math.abs(kart.v) * 3.6)} km/h${kart.drift ? ' · 🌀' + ['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][kart.mt] : ''}`;
 }
+
 function updateCamera(dt) {
   const fp = cur.id === 'fps' && view === 'fps' && !kart.active;
   P.char.group.visible = !fp; if (vm) vm.visible = fp;
@@ -826,7 +848,7 @@ function updateCamera(dt) {
     if (kart.active) {
     tx = kart.x; tz = kart.z; ty = 1.4;
     const freeLook = isTouch ? looking : (performance.now() - cam.lastDrag < 1500);
-    if (!freeLook) cam.yaw = lerpAngle(cam.yaw, kart.yaw, Math.min(1, (isTouch ? 5 : 2.2) * dt));
+    if (!freeLook) cam.yaw = lerpAngle(cam.yaw, kart.camYaw != null ? kart.camYaw : kart.yaw, Math.min(1, (isTouch ? 5 : 2.2) * dt));
   }
   else { tx = P.x; tz = P.z; ty = P.y + 1.5; if (mode === 'play') { if (keys.has('ArrowLeft')) cam.yaw += 1.8 * dt; if (keys.has('ArrowRight')) cam.yaw -= 1.8 * dt; } }
   const d = cam.dist * (kart.active ? 1.15 : 1), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
@@ -894,7 +916,15 @@ function drawMini() {
     const cb = cur.booths.find((b) => b.dept.col === 'cre');
     if (cb) { mx.strokeStyle = '#b79bff'; mx.lineWidth = 2; mx.beginPath(); mx.arc(X(cb.x), Z(cb.z), 7, 0, 7); mx.stroke(); }
   } else if (cur.id === 'race') {
-    mx.strokeStyle = '#6a6e78'; mx.lineWidth = RW.TRACK_W * sc; mx.beginPath(); mx.arc(c, c, RW.TRACK_R * sc, 0, 7); mx.stroke(); mx.fillStyle = '#fff'; mx.fillRect(X(RW.TRACK_R) - 7 * sc, c - 1, 14 * sc, 2);
+    const tk = RW.track;
+    if (tk) {
+      mx.strokeStyle = '#7a7f8a'; mx.lineWidth = Math.max(6, RW.TRACK_W * sc * 1.2); mx.lineJoin = 'round'; mx.beginPath();
+      for (let i = 0; i <= tk.N; i++) { const j = i % tk.N; if (i) mx.lineTo(X(tk.px[j]), Z(tk.pz[j])); else mx.moveTo(X(tk.px[j]), Z(tk.pz[j])); }
+      mx.stroke(); mx.fillStyle = '#fff'; mx.fillRect(X(tk.px[tk.sLine]) - 6, Z(tk.pz[tk.sLine]) - 1.5, 12, 3);
+      if (race) race.ai.forEach((a) => dot(a.x, a.z, 3.5, a.col));
+    } else {
+      mx.strokeStyle = '#6a6e78'; mx.lineWidth = RW.TRACK_W * sc; mx.beginPath(); mx.arc(c, c, RW.TRACK_R * sc, 0, 7); mx.stroke(); mx.fillStyle = '#fff'; mx.fillRect(X(RW.TRACK_R) - 7 * sc, c - 1, 14 * sc, 2);
+    }
   } else if (cur.id === 'soccer') {
   FISH.mini(mx, X, Z, sc);
   } else if (cur.id === 'fps') {
