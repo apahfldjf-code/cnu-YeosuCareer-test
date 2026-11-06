@@ -10,7 +10,7 @@
  * v2 변경점
  *   - 하단 단축바(DOGBAR) 크기 50% 축소 (CFG.bar)
  *   - 우측 하단 조작 버튼(공격·강타·점프·✋) 50% 확대 (CFG.act)
- *   - 브레이크는 공격 버튼 자리, 레이스 취소는 강타 버튼 자리로 이동 (카트 탈 때 크게 보이게)
+ *   - 카트 탈 때: 🌀 드리프트가 공격 버튼 자리(가장 큰 버튼), 🛑 브레이크는 점프 버튼 자리, ✖ 레이스 취소는 강타 버튼 자리
  *   - 재장전·시점전환(FPS)은 점프 버튼 위로 이동
  *
  * 설치: game.js 맨 위 import 들 중 "가장 앞쪽"에 한 줄 (이미 있으면 그대로)
@@ -86,6 +86,7 @@ const ROLES = [
   ['rel',    /🔄/u],
   ['view',   /👁/u],
   ['brake',  /🛑/u],
+  ['drift',  /🌀/u],
   ['cancel', /[✖✕❌]/u],
 ];
 const SKIP = '#bar,#modal,#modal-box,#title,#hudx,#hud,#prompt,#toast,.game-host';
@@ -114,7 +115,7 @@ function style(el, o) {
  *                      [ 점프 ]
  *     [✋사용]
  *     [ 강타/조준 ]   [  공격  ]
- *   카트 탈 때는 공격 자리 = 🛑 브레이크, 강타 자리 = ✖ 레이스 취소
+ *   카트 탈 때는 공격 자리 = 🌀 드리프트, 점프 자리 = 🛑 브레이크, 강타 자리 = ✖ 레이스 취소
  * ─────────────────────────────────────────────────────────── */
 const B = 'var(--b)';
 const K = CFG.act, AT = +(1.35 * K).toFixed(3), SM = +(0.8 * K).toFixed(3), UU = +(1.1 * K).toFixed(3);
@@ -129,9 +130,9 @@ function place(el, role) {
   const rowK = `${B}*${K} + ${G}px`;                         // 기본 버튼 높이 + 간격
   const rel = `${B}*${AT} + ${B}*${K} + ${G * 2}px`;         // 점프 버튼 위
 
-  if (role === 'atk' || role === 'brake')      style(el, { ...base, ...sz(AT), right: right(), bottom: bottom() });
+  if (role === 'atk' || role === 'drift')      style(el, { ...base, ...sz(AT), right: right(), bottom: bottom() });
   else if (role === 'alt' || role === 'cancel') style(el, { ...base, ...sz(K), right: right(side), bottom: bottom() });
-  else if (role === 'jump') style(el, { ...base, ...sz(K), right: right(), bottom: bottom(side) });
+  else if (role === 'jump' || role === 'brake') style(el, { ...base, ...sz(K), right: right(), bottom: bottom(side) });
   else if (role === 'use')  style(el, { ...base, ...sz(UU), right: right(side), bottom: bottom(rowK) });
   else if (role === 'rel')  style(el, { ...base, ...sz(SM), right: right(), bottom: bottom(rel) });
   else if (role === 'view') style(el, { ...base, ...sz(SM), right: right(`${B}*${SM} + 6px`), bottom: bottom(rel) });
